@@ -15,7 +15,7 @@ corner_size = 200
 # ----------------------------
 # Helper functions
 # ----------------------------
-def corner_medians(image, size=200):
+def corner_means(image, size=200):
     ny, nx = image.shape
     corners = [
         image[0:size, 0:size],
@@ -23,7 +23,8 @@ def corner_medians(image, size=200):
         image[ny-size:ny, 0:size],
         image[ny-size:ny, nx-size:nx]
     ]
-    return [np.nanmedian(c) for c in corners]
+
+    return [np.nanmean(c) for c in corners]
 
 
 def max_radius_to_edge(x0, y0, nx, ny):
@@ -60,7 +61,7 @@ def quad_model(r, A):
 with fits.open(reference_fits) as hdul:
     ref_data = hdul[0].data.astype(float)
 
-ref_bg = np.median(corner_medians(ref_data, corner_size))
+ref_bg = np.mean(corner_means(ref_data, corner_size))
 ref_sub = ref_data - ref_bg
 
 x_ref, y_ref = find_centroid_2dg(ref_sub)
@@ -134,7 +135,7 @@ for fname in fits_files:
     with fits.open(path) as hdul:
         data = hdul[0].data.astype(float)
 
-    bg = np.median(corner_medians(data, corner_size))
+    bg = np.median(corner_means(data, corner_size))
     data_sub = data - bg
 
     x_cen, y_cen = find_centroid_2dg(data_sub)
