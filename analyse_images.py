@@ -1,4 +1,5 @@
 import os
+import csv
 import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
@@ -11,6 +12,8 @@ from scipy.optimize import curve_fit
 fits_dir = os.getcwd() + "/300_ver_1/cam4_images/"
 reference_fits = os.getcwd() + "/300_ver_1/reference_image/direct_reference1.fits"
 corner_size = 200
+fratio_ref = 4.2
+output_csv = "fiber_frd_results.csv"
 
 # ----------------------------
 # Helper functions
@@ -23,7 +26,6 @@ def corner_means(image, size=200):
         image[ny-size:ny, 0:size],
         image[ny-size:ny, nx-size:nx]
     ]
-
     return [np.nanmean(c) for c in corners]
 
 
@@ -52,8 +54,19 @@ def find_centroid_2dg(image):
 
 
 def quad_model(r, A):
-    """Simple quadratic cumulative model."""
     return A * r**2
+
+
+def add_fratio_axis(ax, r_cross, f_ref):
+    def px_to_f(px):
+        return (px / r_cross) * f_ref
+
+    def f_to_px(f):
+        return (f / f_ref) * r_cross
+
+    secax = ax.secondary_xaxis("top", functions=(px_to_f, f_to_px))
+    secax.set_xlabel("f-ratio")
+
 
 # ----------------------------
 # Reference image analysis
@@ -67,13 +80,9 @@ ref_sub = ref_data - ref_bg
 x_ref, y_ref = find_centroid_2dg(ref_sub)
 r_ref, c_ref = cumulative_radial_profile(ref_sub, x_ref, y_ref)
 
-# Normalise
 c_ref_norm = c_ref / np.nanmax(c_ref)
 
-# 75% intensity radius
 r75 = np.interp(0.75, c_ref_norm, r_ref)
-
-# Fit ONLY below 75%
 fit_mask = c_ref_norm <= 0.75
 
 popt, _ = curve_fit(
@@ -84,18 +93,13 @@ popt, _ = curve_fit(
 )
 
 A_fit = popt[0]
-
-# Radius where quadratic reaches 100%
 r_cross = np.sqrt(1.0 / A_fit)
 
 # ----------------------------
 # Plot reference image
 # ----------------------------
-fig, (ax1, ax2) = plt.subplots(
-    1, 2, figsize=(12, 5), constrained_layout=True
-)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
 
-# Reference image
 im = ax1.imshow(
     ref_sub,
     origin="lower",
@@ -109,7 +113,6 @@ ax1.set_xlabel("X [pixels]")
 ax1.set_ylabel("Y [pixels]")
 plt.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
 
-# Reference cumulative + fit
 ax2.plot(r_ref, c_ref_norm, "k", lw=2, label="Reference")
 r_fit = np.linspace(0, r_ref.max(), 500)
 ax2.plot(r_fit, quad_model(r_fit, A_fit), "r--", lw=2, label=r"Fit: $A r^2$")
@@ -122,11 +125,15 @@ ax2.set_ylim(0, 1.05)
 ax2.set_title("Reference Cumulative Profile")
 ax2.legend(fontsize=8)
 
+add_fratio_axis(ax2, r_cross, fratio_ref)
+
 plt.show()
 
 # ----------------------------
-# Main loop over individual fiber images
+# Main loop + FRD calculation
 # ----------------------------
+results = []
+
 fits_files = sorted(f for f in os.listdir(fits_dir) if f.lower().endswith(".fits"))
 
 for fname in fits_files:
@@ -135,18 +142,21 @@ for fname in fits_files:
     with fits.open(path) as hdul:
         data = hdul[0].data.astype(float)
 
-    bg = np.median(corner_means(data, corner_size))
+    bg = np.mean(corner_means(data, corner_size))
     data_sub = data - bg
 
     x_cen, y_cen = find_centroid_2dg(data_sub)
     radius, cum_counts = cumulative_radial_profile(data_sub, x_cen, y_cen)
     cum_norm = cum_counts / np.nanmax(cum_counts)
 
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(12, 5), constrained_layout=True
-    )
+    frac_at_rcross = np.interp(r_cross, radius, cum_norm)
+    frd = 1.0 - frac_at_rcross
 
-    # Image
+    fiber_number = fname.split("_")[0]
+    results.append((fiber_number, frd))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
+
     im = ax1.imshow(
         data_sub,
         origin="lower",
@@ -160,12 +170,14 @@ for fname in fits_files:
     ax1.set_ylabel("Y [pixels]")
     plt.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
 
-    # Cumulative profiles
-    ax2.plot(radius, cum_norm, color="gray", alpha=0.6, label="Fiber: "+fname.split("_")[0])
+    ax2.plot(radius, cum_norm, color="gray", alpha=0.6,
+             label=f"Fiber {fiber_number}")
     ax2.plot(r_ref, c_ref_norm, "k", lw=2, label="Reference")
-    ax2.plot(r_fit, quad_model(r_fit, A_fit), "r--", lw=2, label=r"Fit: $A r^2$")
-    ax2.axvline(r_cross, color="blue", ls=":", lw=2,
-                label=f"100% at {r_cross:.1f} px")
+    ax2.plot(r_fit, quad_model(r_fit, A_fit), "r--", lw=2,
+             label=r"Fit: $A r^2$")
+    ax2.axvline(r_cross, color="blue", ls=":", lw=2)
+    ax2.axhline(frac_at_rcross, color="green", ls=":", lw=2,
+                label=f"{frac_at_rcross*100:.1f}% @ r_cross")
 
     ax2.set_xlabel("Radius [pixels]")
     ax2.set_ylabel("Normalised cumulative counts")
@@ -173,4 +185,17 @@ for fname in fits_files:
     ax2.set_title("Cumulative Radial Profile")
     ax2.legend(fontsize=8)
 
+    add_fratio_axis(ax2, r_cross, fratio_ref)
+
     plt.show()
+
+# ----------------------------
+# Write CSV
+# ----------------------------
+with open(output_csv, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["fiber_number", "FRD"])
+    for row in results:
+        writer.writerow(row)
+
+print(f"Saved FRD results to {output_csv}")
