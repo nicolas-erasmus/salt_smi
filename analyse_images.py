@@ -58,14 +58,20 @@ def quad_model(r, A):
 
 
 def add_fratio_axis(ax, r_cross, f_ref):
+
     def px_to_f(px):
-        return (px / r_cross) * f_ref
+        px = np.asarray(px)
+        return (r_cross / px) * f_ref
 
     def f_to_px(f):
-        return (f / f_ref) * r_cross
+        f = np.asarray(f)
+        return (r_cross / f) * f_ref
 
     secax = ax.secondary_xaxis("top", functions=(px_to_f, f_to_px))
     secax.set_xlabel("f-ratio")
+    
+    return secax
+    
 
 # ----------------------------
 # Reference image (cam4) analysis
@@ -120,7 +126,9 @@ ax2.set_ylabel("Normalised cumulative counts")
 ax2.set_ylim(0, 1.05)
 ax2.set_title("Reference Cumulative Profile")
 ax2.legend(fontsize=8)
-add_fratio_axis(ax2, r_cross, fratio_ref)
+secax = add_fratio_axis(ax2, r_cross, fratio_ref)
+secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
+secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
 plt.show()
 
@@ -199,7 +207,9 @@ for fname in fits_files:
     ax2.set_ylim(0, 1.05)
     ax2.set_title("FRD Diagnostic")
     ax2.legend(fontsize=8)
-    add_fratio_axis(ax2, r_cross, fratio_ref)
+    secax = add_fratio_axis(ax2, r_cross, fratio_ref)
+    secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
+    secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
     
 
     im = ax3.imshow(
