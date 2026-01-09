@@ -168,8 +168,8 @@ for fname in fits_files:
     c_fib_norm = c_fib / np.nanmax(c_fib)
     c_flux_ref_norm = c_flux_ref / np.nanmax(c_flux_ref)
 
-    r90_fib = np.interp(0.90, c_fib_norm, r_fib)
-    r90_flux_ref = np.interp(0.90, c_flux_ref_norm, r_flux_ref)
+    r90_fib = np.interp(0.99, c_fib_norm, r_fib)
+    r90_flux_ref = np.interp(0.99, c_flux_ref_norm, r_flux_ref)
 
     C90_fib = np.interp(r90_fib, r_fib, c_fib)
     C90_flux_ref = np.interp(r90_flux_ref, r_flux_ref, c_flux_ref)
@@ -231,7 +231,7 @@ for fname in fits_files:
     ax4.axvline(r90_flux_ref, color="r", ls=":", lw=1)
     ax4.set_xlabel("Radius [pixels]")
     ax4.set_ylabel("Cumulative photons/seconds")
-    ax4.set_title(f"EE90 Ratio = {ee90_ratio:.3f}")
+    ax4.set_title(f"EE99 Ratio = {ee90_ratio:.3f}")
     ax4.legend(fontsize=8)
 
     plt.show()
@@ -241,7 +241,7 @@ for fname in fits_files:
 # ----------------------------
 with open(output_csv, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["fiber_number", "FRD_loss", "EE90_flux_loss"])
+    writer.writerow(["fiber_number", "FRD_loss", "EE99_flux_loss"])
     writer.writerows(results)
 
 print(f"Saved results to {output_csv}")
