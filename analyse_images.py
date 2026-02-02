@@ -13,7 +13,7 @@ fits_dir = os.getcwd() + "/300_ver_1/cam4_images/"
 reference_fits = os.getcwd() + "/300_ver_1/reference_image/direct_reference1.fits"
 corner_size = 200
 fratio_ref = 4.2
-output_csv = "fiber_frd_ee90_results.csv"
+output_csv = "fiber_frd_throughput_results.csv"
 
 # ----------------------------
 # Helper functions
@@ -57,19 +57,26 @@ def quad_model(r, A):
     return A * r**2
 
 
+def px_to_f(px, r_cross, f_ref):
+    px = np.asarray(px)
+    return (r_cross / px) * f_ref
+
+
+def f_to_px(f, r_cross, f_ref):
+    f = np.asarray(f)
+    return (r_cross / f) * f_ref
+    
+
 def add_fratio_axis(ax, r_cross, f_ref):
 
-    def px_to_f(px):
-        px = np.asarray(px)
-        return (r_cross / px) * f_ref
-
-    def f_to_px(f):
-        f = np.asarray(f)
-        return (r_cross / f) * f_ref
-
-    secax = ax.secondary_xaxis("top", functions=(px_to_f, f_to_px))
+    secax = ax.secondary_xaxis(
+        "top",
+        functions=(
+            lambda px: px_to_f(px, r_cross, f_ref),
+            lambda f:  f_to_px(f, r_cross, f_ref),
+        )
+    )
     secax.set_xlabel("f-ratio")
-    
     return secax
     
 
@@ -99,10 +106,12 @@ popt, _ = curve_fit(
 A_fit = popt[0]
 r_cross = np.sqrt(1.0 / A_fit)
 
+f_2_273_px = f_to_px(2.273, r_cross, fratio_ref)
+cum_counts_2_273_ref = np.interp(f_2_273_px, r_ref, c_ref)
 # ----------------------------
 # Reference plot
 # ----------------------------
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 5), constrained_layout=True)
 
 im = ax1.imshow(
     ref_sub,
@@ -130,6 +139,18 @@ secax = add_fratio_axis(ax2, r_cross, fratio_ref)
 secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
 secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
+ax3.plot(r_ref, c_ref, "k", lw=2, label="Reference")
+ax3.axvline(f_2_273_px, color="blue", ls=":", lw=2,label=f"Cumulative counts @ f/2.273 = {cum_counts_2_273_ref:.3e}")
+ax3.set_xlabel("Radius [pixels]")
+ax3.set_ylabel("Cumulative counts")
+ax3.set_ylim(0,)
+# ax2.set_title("Reference Cumulative Profile")
+ax3.legend(fontsize=8)
+secax = add_fratio_axis(ax3, r_cross, fratio_ref)
+secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
+secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
+
+
 plt.show()
 
 # ----------------------------
@@ -139,6 +160,8 @@ results = []
 
 fits_files = sorted(f for f in os.listdir(fits_dir) if f.lower().endswith(".fits"))
 
+C90_flux_ref_origin = None
+
 for fname in fits_files:
     fiber_path = os.path.join(fits_dir, fname)
     ref_flux_path = os.path.join(
@@ -147,14 +170,10 @@ for fname in fits_files:
     )
 
     with fits.open(fiber_path) as hdul:
-        fiber_exp_time = hdul[0].header["EXPTIME"]
-        fiber_gain = hdul[0].header["EGAINSAV"]
-        fiber_data = (hdul[0].data.astype(float)/fiber_exp_time)*fiber_gain
+        fiber_data = hdul[0].data.astype(float)
 
     with fits.open(ref_flux_path) as hdul:
-        ref_flux_exp_time = hdul[0].header["EXPTIME"]
-        ref_flux_gain = hdul[0].header["EGAINSAV"]
-        ref_flux_data = (hdul[0].data.astype(float)/ref_flux_exp_time)*ref_flux_gain
+        ref_flux_data = hdul[0].data.astype(float)
 
     fiber_sub = fiber_data - np.mean(corner_means(fiber_data, corner_size))
     ref_flux_sub = ref_flux_data - np.mean(corner_means(ref_flux_data, corner_size))
@@ -168,21 +187,24 @@ for fname in fits_files:
     c_fib_norm = c_fib / np.nanmax(c_fib)
     c_flux_ref_norm = c_flux_ref / np.nanmax(c_flux_ref)
 
-    r90_fib = np.interp(0.99, c_fib_norm, r_fib)
-    r90_flux_ref = np.interp(0.99, c_flux_ref_norm, r_flux_ref)
+    r90_flux_ref = np.interp(0.90, c_flux_ref_norm, r_flux_ref)
 
-    C90_fib = np.interp(r90_fib, r_fib, c_fib)
     C90_flux_ref = np.interp(r90_flux_ref, r_flux_ref, c_flux_ref)
-
-    ee90_ratio = C90_fib / C90_flux_ref
+    if C90_flux_ref_origin is None: # first iteration
+        C90_flux_ref_origin = C90_flux_ref
+    
+    reference_flux_ratio = C90_flux_ref_origin/C90_flux_ref
+    
+    cum_counts_2_273_fib = np.interp(f_2_273_px, r_fib, c_fib)
+    f_2_273_ratio = cum_counts_2_273_fib/cum_counts_2_273_ref
 
     frac_at_rcross = np.interp(r_cross, r_fib, c_fib_norm)
     frd = 1.0 - frac_at_rcross
 
     fiber_number = fname.split("_")[0]
-    results.append((fiber_number, frd, (1-ee90_ratio)))
+    results.append((fiber_number, frd, f_2_273_ratio, reference_flux_ratio))
 
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, figsize=(24, 5), constrained_layout=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 5), constrained_layout=True)
 
     im = ax1.imshow(
         fiber_sub,
@@ -198,10 +220,10 @@ for fname in fits_files:
     plt.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
 
     ax2.plot(r_fib, c_fib_norm, color="gray", lw=2, label="Fiber")
-    ax2.plot(r_ref, c_ref_norm, "k", lw=2, label="Reference")
+    ax2.plot(r_ref, c_ref_norm, "k", lw=2, label="Direct Reference")
     ax2.axvline(r_cross, color="blue", ls=":", lw=2)
     ax2.axhline(frac_at_rcross, color="green", ls=":", lw=2,
-                label=f"{frac_at_rcross*100:.1f}% @ r_cross")
+                label=f"FRD = {frac_at_rcross*100:.1f}%")
     ax2.set_xlabel("Radius [pixels]")
     ax2.set_ylabel("Normalised cumulative counts")
     ax2.set_ylim(0, 1.05)
@@ -212,27 +234,18 @@ for fname in fits_files:
     secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
     
 
-    im = ax3.imshow(
-        ref_flux_sub,
-        origin="lower",
-        cmap="gray",
-        vmin=np.percentile(ref_flux_sub, 5),
-        vmax=np.percentile(ref_flux_sub, 99)
-    )
-    ax3.plot(x_flux_ref, y_flux_ref, "+", color="red", markersize=18, mew=2)
-    ax3.set_title(f"{fname.replace("cam4", "cam2")}\nRef Flux Image")
-    ax3.set_xlabel("X [pixels]")
-    ax3.set_ylabel("Y [pixels]")
-    plt.colorbar(im, ax=ax3, fraction=0.046, pad=0.04)
+    ax3.plot(r_fib, c_fib, color="gray", lw=2, label="Fiber")
+    ax3.plot(r_ref, c_ref, "k", lw=2, label="Direct Reference")
+    ax3.axvline(f_2_273_px, color="blue", ls=":", lw=2, label=f"Flux throughput = {f_2_273_ratio*100:.1f}%")
 
-    ax4.plot(r_fib, c_fib, "k", lw=2, label="Fiber (cam4)")
-    ax4.plot(r_flux_ref, c_flux_ref, "r", lw=2, label="Ref flux (cam2)")
-    ax4.axvline(r90_fib, color="k", ls=":", lw=1)
-    ax4.axvline(r90_flux_ref, color="r", ls=":", lw=1)
-    ax4.set_xlabel("Radius [pixels]")
-    ax4.set_ylabel("Cumulative photons/seconds")
-    ax4.set_title(f"EE99 Ratio = {ee90_ratio:.3f}")
-    ax4.legend(fontsize=8)
+    ax3.set_xlabel("Radius [pixels]")
+    ax3.set_ylabel("Cumulative Counts")
+    ax3.set_ylim(0,)
+    
+    ax3.legend(fontsize=8)
+    secax = add_fratio_axis(ax3, r_cross, fratio_ref)
+    secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
+    secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
     plt.show()
 
@@ -241,7 +254,7 @@ for fname in fits_files:
 # ----------------------------
 with open(output_csv, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["fiber_number", "FRD_loss", "EE99_flux_loss"])
+    writer.writerow(["fiber_number", "FRD", "Flux_throughput","Ref_flux"])
     writer.writerows(results)
 
 print(f"Saved results to {output_csv}")
