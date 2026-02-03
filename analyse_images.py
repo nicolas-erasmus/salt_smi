@@ -151,7 +151,9 @@ secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
 secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
 
-plt.show()
+# plt.show()
+plt.savefig("reference.pdf", bbox_inches='tight', dpi=150)
+
 
 # ----------------------------
 # Main loop
@@ -197,12 +199,13 @@ for fname in fits_files:
     
     cum_counts_2_273_fib = np.interp(f_2_273_px, r_fib, c_fib)
     f_2_273_ratio = cum_counts_2_273_fib/cum_counts_2_273_ref
+    flux_loss = 1.0 - f_2_273_ratio
 
     frac_at_rcross = np.interp(r_cross, r_fib, c_fib_norm)
     frd = 1.0 - frac_at_rcross
 
     fiber_number = fname.split("_")[0]
-    results.append((fiber_number, frd, f_2_273_ratio, reference_flux_ratio))
+    results.append((fiber_number, frd, flux_loss, reference_flux_ratio))
 
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 5), constrained_layout=True)
 
@@ -247,14 +250,15 @@ for fname in fits_files:
     secax.set_xticks([1, 2.3, 3, 4.2, 7, 20])
     secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
-    plt.show()
-
+    # plt.show()
+    plt.savefig(f"{fname.split(".")[0]}.pdf", bbox_inches='tight', dpi=150)
+    
 # ----------------------------
 # Write CSV
 # ----------------------------
 with open(output_csv, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["fiber_number", "FRD", "Flux_throughput","Ref_flux"])
+    writer.writerow(["fiber_number", "FRD", "Flux_loss","Ref_flux"])
     writer.writerows(results)
 
 print(f"Saved results to {output_csv}")
