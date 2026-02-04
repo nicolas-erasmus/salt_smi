@@ -195,7 +195,7 @@ for fname in fits_files:
     if C90_flux_ref_origin is None: # first iteration
         C90_flux_ref_origin = C90_flux_ref
     
-    reference_flux_ratio = C90_flux_ref_origin/C90_flux_ref
+    reference_flux_ratio = C90_flux_ref/C90_flux_ref_origin
     
     cum_counts_2_273_fib = np.interp(f_2_273_px, r_fib, c_fib)
     f_2_273_ratio = cum_counts_2_273_fib/cum_counts_2_273_ref
