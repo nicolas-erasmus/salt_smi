@@ -10,7 +10,7 @@ file1 = os.getcwd() + "/300_ver_1/fiber_stage_pos.csv"
 file2 = os.getcwd() + "/300_ver_1/fiber_frd_throughput_results.csv"
 
 fiber_radius_mm = 0.185
-x_offset_slit_stage = 30   # mm offset for fiber_id >= 256
+x_offset_slit_stage = 30     # mm offset for fiber_id >= 256
 x_offset_bundle_stage = 50   # mm offset for fiber_id >= 256
 
 # ===============================
@@ -21,7 +21,6 @@ df_loss = pd.read_csv(file2)
 
 # -------------------------------
 # Normalise Fiber IDs
-# (handles 001 vs 1)
 # -------------------------------
 df_pos["fiber_id"]  = df_pos.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
 df_loss["fiber_id"] = df_loss.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
@@ -29,120 +28,154 @@ df_loss["fiber_id"] = df_loss.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
 # -------------------------------
 # Extract required columns
 # -------------------------------
-df_pos = df_pos.assign(
-    X = df_pos.iloc[:, 2],   # stage X
-    Y = df_pos.iloc[:, 1],   # stage Y
-    X_alt = df_pos.iloc[:, 3],  # long stage X
-    Y_alt = 0.0                 # all fibers on Y = 0 for slit
-)
+df_pos["X"]     = df_pos.iloc[:, 2]
+df_pos["Y"]     = df_pos.iloc[:, 1]
+df_pos["X_alt"] = df_pos.iloc[:, 3]
+df_pos["Y_alt"] = 0.0
 
-# Apply X offset for fiber IDs >= 256 
+# Apply offsets
 df_pos.loc[df_pos["fiber_id"] >= 256, "X_alt"] += x_offset_slit_stage
-df_pos.loc[df_pos["fiber_id"] >= 256, "X"] += x_offset_bundle_stage
+df_pos.loc[df_pos["fiber_id"] >= 256, "X"]     += x_offset_bundle_stage
 
-df_loss = df_loss.assign(
-    frd_loss   = df_loss.iloc[:, 1],
-    flux_loss  = df_loss.iloc[:, 2] * df_loss.iloc[:, 3],
-    total_loss = df_loss.iloc[:, 4]
-)
+df_loss["frd_loss"]   = df_loss.iloc[:, 1]
+df_loss["flux_loss"]  = df_loss.iloc[:, 2] * df_loss.iloc[:, 3]
+df_loss["total_loss"] = df_loss.iloc[:, 4]
 
 # -------------------------------
-# Merge on fiber ID
+# Merge
 # -------------------------------
 data = pd.merge(df_pos, df_loss, on="fiber_id", how="inner")
 
-# ===============================
-# Generic plotting function
-# ===============================
-def plot_fibers(
-    data, value_col, title, cbar_label,
-    x_col="X", y_col="Y",
-    vmin=None, vmax=None, cmap=plt.cm.viridis
-):
+# ==========================================================
+# PLOT 1 — FRD loss, stage positions
+# ==========================================================
+fig, ax = plt.subplots(figsize=(30, 3))
+norm = plt.Normalize(data["frd_loss"].min(), data["frd_loss"].max())
 
-    fig, ax = plt.subplots(figsize=(8, 8))
-
-    values = data[value_col]
-    norm = plt.Normalize(
-        vmin if vmin is not None else values.min(),
-        vmax if vmax is not None else values.max()
+for _, row in data.iterrows():
+    ax.add_patch(plt.Circle(
+        (row["X"], row["Y"]),
+        fiber_radius_mm,
+        color=plt.cm.viridis(norm(row["frd_loss"])),
+        ec="black", lw=0.5
+    ))
+    ax.text(
+        row["X"], row["Y"],
+        f"{int(row['fiber_id'])}",
+        ha="center", va="center",
+        fontsize=6, color="white", weight="bold"
     )
 
-    for _, row in data.iterrows():
-        color = cmap(norm(row[value_col]))
-        circle = plt.Circle(
-            (row[x_col], row[y_col]),
-            radius=fiber_radius_mm,
-            color=color,
-            ec="black",
-            lw=0.5
-        )
-        ax.add_patch(circle)
-        ax.text(
-            row[x_col], row[y_col],
-            f"{row['fiber_id']}",
-            ha="center", va="center",
-            fontsize=6, color="white", weight="bold"
-        )
+sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
+sm.set_array([])
+plt.colorbar(sm, ax=ax, label="FRD loss")
 
-    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-    sm.set_array([])
-    plt.colorbar(sm, ax=ax, label=cbar_label)
+ax.set_title("Fiber positions coloured by FRD loss")
+ax.set_xlabel("X position (mm)")
+ax.set_ylabel("Y position (mm)")
+ax.set_aspect("equal")
+ax.set_xlim(data["X"].min() - 1, data["X"].max() + 1)
+ax.set_ylim(data["Y"].min() - 1, data["Y"].max() + 1)
 
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("X position (mm)")
-    ax.set_ylabel("Y position (mm)")
-    ax.set_title(title)
+plt.show()
 
-    ax.set_xlim(data[x_col].min() - 1, data[x_col].max() + 1)
-    ax.set_ylim(data[y_col].min() - 1, data[y_col].max() + 1)
+# ==========================================================
+# PLOT 2 — Flux loss, stage positions
+# ==========================================================
+fig, ax = plt.subplots(figsize=(30, 3))
+norm = plt.Normalize(0.0, data["flux_loss"].max())
 
-    plt.show()
+for _, row in data.iterrows():
+    ax.add_patch(plt.Circle(
+        (row["X"], row["Y"]),
+        fiber_radius_mm,
+        color=plt.cm.viridis(norm(row["flux_loss"])),
+        ec="black", lw=0.5
+    ))
+    ax.text(
+        row["X"], row["Y"],
+        f"{int(row['fiber_id'])}",
+        ha="center", va="center",
+        fontsize=6, color="white", weight="bold"
+    )
 
-# ===============================
-# Plot 1: FRD loss (stage positions)
-# ===============================
-plot_fibers(
-    data,
-    value_col="frd_loss",
-    title="Fiber positions coloured by FRD loss",
-    cbar_label="FRD loss",
-    x_col="X",
-    y_col="Y"
-)
+sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
+sm.set_array([])
+plt.colorbar(sm, ax=ax, label="Flux loss")
 
-# ===============================
-# Plot 2: Flux loss (stage positions)
-# ===============================
-plot_fibers(
-    data,
-    value_col="flux_loss",
-    title="Fiber positions coloured by Flux loss",
-    cbar_label="Flux loss",
-    x_col="X",
-    y_col="Y"
-)
+ax.set_title("Fiber positions coloured by Flux loss")
+ax.set_xlabel("X position (mm)")
+ax.set_ylabel("Y position (mm)")
+ax.set_aspect("equal")
 
-# ===============================
-# Plot 3: Total loss (stage positions)
-# ===============================
-plot_fibers(
-    data,
-    value_col="total_loss",
-    title="Fiber positions coloured by Total loss",
-    cbar_label="Total loss",
-    x_col="X",
-    y_col="Y"
-)
+# IMPORTANT: widened limits to include offset fibers
+ax.set_xlim(data["X"].min() - 1, data["X"].max() + 1)
+ax.set_ylim(data["Y"].min() - 1, data["Y"].max() + 1)
 
-# ===============================
-# Plot 4: Total loss (1D layout, column 4 X, Y = 0)
-# ===============================
-plot_fibers(
-    data,
-    value_col="total_loss",
-    title="Fiber layout using column 4 X positions (Y = 0)",
-    cbar_label="Total loss",
-    x_col="X_alt",
-    y_col="Y_alt"
-)
+plt.show()
+
+# ==========================================================
+# PLOT 3 — Total loss, stage positions
+# ==========================================================
+fig, ax = plt.subplots(figsize=(30, 3))
+norm = plt.Normalize(data["total_loss"].min(), data["total_loss"].max())
+
+for _, row in data.iterrows():
+    ax.add_patch(plt.Circle(
+        (row["X"], row["Y"]),
+        fiber_radius_mm,
+        color=plt.cm.plasma(norm(row["total_loss"])),
+        ec="black", lw=0.5
+    ))
+    ax.text(
+        row["X"], row["Y"],
+        f"{int(row['fiber_id'])}",
+        ha="center", va="center",
+        fontsize=6, color="white", weight="bold"
+    )
+
+sm = plt.cm.ScalarMappable(norm=norm, cmap="plasma")
+sm.set_array([])
+plt.colorbar(sm, ax=ax, label="Total loss")
+
+ax.set_title("Fiber positions coloured by Total loss")
+ax.set_xlabel("X position (mm)")
+ax.set_ylabel("Y position (mm)")
+ax.set_aspect("equal")
+ax.set_xlim(data["X"].min() - 1, data["X"].max() + 1)
+ax.set_ylim(data["Y"].min() - 1, data["Y"].max() + 1)
+
+plt.show()
+
+# ==========================================================
+# PLOT 4 — 1D slit layout
+# ==========================================================
+fig, ax = plt.subplots(figsize=(60, 3))
+norm = plt.Normalize(data["total_loss"].min(), data["total_loss"].max())
+
+for _, row in data.iterrows():
+    ax.add_patch(plt.Circle(
+        (row["X_alt"], row["Y_alt"]),
+        fiber_radius_mm,
+        color=plt.cm.viridis(norm(row["total_loss"])),
+        ec="black", lw=0.5
+    ))
+    ax.text(
+        row["X_alt"], row["Y_alt"],
+        f"{int(row['fiber_id'])}",
+        ha="center", va="center",
+        fontsize=6, color="white", weight="bold"
+    )
+
+sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
+sm.set_array([])
+plt.colorbar(sm, ax=ax, label="Total loss")
+
+ax.set_title("Fiber layout using column 4 X positions (Y = 0)")
+ax.set_xlabel("X position (mm)")
+ax.set_ylabel("Y")
+ax.set_aspect("equal")
+ax.set_xlim(data["X_alt"].min() - 1, data["X_alt"].max() + 1)
+ax.set_ylim(-0.2, 0.2)
+
+plt.show()
