@@ -11,9 +11,10 @@ from scipy.optimize import curve_fit
 # ----------------------------
 fits_dir = os.getcwd() + "/300_ver_1/cam4_images/"
 reference_fits = os.getcwd() + "/300_ver_1/reference_image/direct_reference1.fits"
+save_dir = os.getcwd() + "/300_ver_1/"
 corner_size = 200
 fratio_ref = 4.2
-output_csv = "fiber_frd_throughput_results.csv"
+output_csv = os.getcwd() + "/300_ver_1/fiber_frd_throughput_results.csv"
 
 # ----------------------------
 # Helper functions
@@ -152,7 +153,7 @@ secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
 
 # plt.show()
-plt.savefig("reference.pdf", bbox_inches='tight', dpi=150)
+plt.savefig(save_dir+"/reference.pdf", bbox_inches='tight', dpi=150)
 
 
 # ----------------------------
@@ -205,7 +206,8 @@ for fname in fits_files:
     frd = 1.0 - frac_at_rcross
 
     fiber_number = fname.split("_")[0]
-    results.append((fiber_number, frd, flux_loss, reference_flux_ratio))
+    total_loss = (1-(1-frd)*(1-flux_loss*reference_flux_ratio))
+    results.append((fiber_number, frd, flux_loss, reference_flux_ratio,total_loss))
 
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 5), constrained_layout=True)
 
@@ -251,14 +253,14 @@ for fname in fits_files:
     secax.set_xticklabels([f"f/{i}" for i in [1, 2.3, 3, 4.2, 7, 20]])
 
     # plt.show()
-    plt.savefig(f"{fname.split(".")[0]}.pdf", bbox_inches='tight', dpi=150)
+    plt.savefig(save_dir+f"/{fname.split(".")[0]}.pdf", bbox_inches='tight', dpi=150)
     
 # ----------------------------
 # Write CSV
 # ----------------------------
 with open(output_csv, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["fiber_number", "FRD", "Flux_loss","Ref_flux"])
+    writer.writerow(["fiber_number", "FRD_loss", "Flux_loss","Ref_flux", "Total_loss"])
     writer.writerows(results)
 
 print(f"Saved results to {output_csv}")
