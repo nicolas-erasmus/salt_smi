@@ -41,7 +41,7 @@ df_pos["X_alt"] += -df_corr["offset"]
 
 # Stage offsets for RHS bundle
 df_pos.loc[df_pos["fiber_id"] >= 256, "X_alt"] += x_offset_slit_stage
-df_pos.loc[df_pos["fiber_id"] >= 256, "Y_alt"] += 1
+df_pos.loc[df_pos["fiber_id"] >= 256, "Y_alt"] += 0.3
 df_pos.loc[df_pos["fiber_id"] >= 256, "X"]     += x_offset_bundle_stage
 
 df_loss["frd_loss"]   = df_loss.iloc[:, 1]
@@ -115,21 +115,20 @@ def broken_stage_plot(values, cmap, title, cbar_label):
 
     ax1.set_ylabel("Y position (mm)")
     fig.supxlabel("X position (mm)")
-    fig.suptitle(title, y=1.02)
+    fig.suptitle(title, y=0.95)
 
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
     fig.colorbar(sm, ax=axes, label=cbar_label)
-
-    plt.show()
-
+    plt.savefig("Plot_"+title+".pdf", bbox_inches='tight', dpi=150)
+    
 # ==========================================================
 # PLOT 1 — FRD loss (BROKEN X)
 # ==========================================================
 broken_stage_plot(
     data["frd_loss"],
     plt.cm.viridis,
-    "Fiber positions coloured by FRD loss",
+    "FRD loss",
     "FRD loss"
 )
 
@@ -139,7 +138,7 @@ broken_stage_plot(
 broken_stage_plot(
     data["flux_loss"],
     plt.cm.viridis,
-    "Fiber positions coloured by Flux loss",
+    "Flux loss",
     "Flux loss"
 )
 
@@ -149,14 +148,14 @@ broken_stage_plot(
 broken_stage_plot(
     data["total_loss"],
     plt.cm.plasma,
-    "Fiber positions coloured by Total loss",
+    "Total loss",
     "Total loss"
 )
 
 # ==========================================================
 # PLOT 4 — 1D slit layout (NO BREAK)
 # ==========================================================
-fig, ax = plt.subplots(figsize=(60, 10))
+fig, ax = plt.subplots(figsize=(60, 5))
 norm = plt.Normalize(data["total_loss"].min(), data["total_loss"].max())
 
 for _, row in data.iterrows():
@@ -178,11 +177,13 @@ sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
 sm.set_array([])
 plt.colorbar(sm, ax=ax, label="Total loss")
 
-ax.set_title("Fiber layout using column 4 X positions (Y = 0)")
+ax.set_title("Fiber layout on slit")
 ax.set_xlabel("X position (mm)")
 ax.set_ylabel("Y")
-ax.set_aspect("equal")
+# ax.set_aspect("equal")
 ax.set_xlim(data["X_alt"].min() - 1, data["X_alt"].max() + 1)
-ax.set_ylim(-2, 2)
+ax.set_ylim(-0.2, 0.5)
+plt.tight_layout()
+plt.savefig("Plot_Slit.pdf", bbox_inches='tight', dpi=150)
 
-plt.show()
+# plt.show()
