@@ -200,14 +200,17 @@ for fname in fits_files:
     
     cum_counts_2_273_fib = np.interp(f_2_273_px, r_fib, c_fib)
     f_2_273_ratio = cum_counts_2_273_fib/cum_counts_2_273_ref
-    flux_loss = 1.0 - f_2_273_ratio
-
+    flux_throughput = f_2_273_ratio
+    flux_throughput_corrected = flux_throughput/reference_flux_ratio
+    
     frac_at_rcross = np.interp(r_cross, r_fib, c_fib_norm)
-    frd = 1.0 - frac_at_rcross
+    frd_throughput = frac_at_rcross
 
     fiber_number = fname.split("_")[0]
-    total_loss = (1-(1-frd)*(1-flux_loss*reference_flux_ratio))
-    results.append((fiber_number, frd, flux_loss, reference_flux_ratio,total_loss))
+    
+    total_throughput = flux_throughput_corrected*frd_throughput
+    
+    results.append((fiber_number, frd_throughput, flux_throughput, reference_flux_ratio,flux_throughput_corrected, total_throughput))
 
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 5), constrained_layout=True)
 
@@ -260,7 +263,7 @@ for fname in fits_files:
 # ----------------------------
 with open(output_csv, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["fiber_number", "FRD_loss", "Flux_loss","Ref_flux", "Total_loss"])
+    writer.writerow(["fiber_number, frd_throughput, flux_throughput, reference_flux_ratio, flux_throughput_corrected, total_throughput"])
     writer.writerows(results)
 
 print(f"Saved results to {output_csv}")
