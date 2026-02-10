@@ -18,15 +18,15 @@ x_offset_bundle_stage = 35
 # Read CSV files
 # ===============================
 df_pos  = pd.read_csv(file1)
-df_loss = pd.read_csv(file2)
+df_thr = pd.read_csv(file2)
 df_corr = pd.read_csv(file3)
 
 # ===============================
 # Normalise Fiber IDs
 # ===============================
 df_pos["fiber_id"]  = df_pos.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
-df_loss["fiber_id"] = df_loss.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
-df_corr["fiber_id"] = df_loss.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
+df_thr["fiber_id"] = df_thr.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
+df_corr["fiber_id"] = df_corr.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
 
 # ===============================
 # Extract required columns
@@ -34,29 +34,32 @@ df_corr["fiber_id"] = df_loss.iloc[:, 0].astype(str).str.lstrip("0").astype(int)
 df_pos["X"]     = df_pos.iloc[:, 2]
 df_pos["Y"]     = df_pos.iloc[:, 1]
 df_pos["X_alt"] = df_pos.iloc[:, 3]
-df_pos["Y_alt"] = 0.0
+df_pos["Y_alt"] = 0.0 # slit side all on the same y-location
 
-df_corr["offset"] = df_corr.iloc[:, 1] / 1000  # mm
-df_pos["X_alt"] += -df_corr["offset"]
+df_corr["offset"] = df_corr.iloc[:, 1] / 1000  # converted to mm
+df_pos["X_alt"] += -df_corr["offset"] # apply the corrections based on the cam3 postion extraction
 
-# Stage offsets for RHS bundle
+# Stage offsets for RHS bundle, because stages need to be moved for RHS fibers i.e. index >=256
 df_pos.loc[df_pos["fiber_id"] >= 256, "X_alt"] += x_offset_slit_stage
-# df_pos.loc[df_pos["fiber_id"] >= 256, "Y_alt"] += 0.3
+# df_pos.loc[df_pos["fiber_id"] >= 256, "Y_alt"] += 0.3 # move them in y to identify in plot
 df_pos.loc[df_pos["fiber_id"] >= 256, "X"]     += x_offset_bundle_stage
 
-df_loss["frd_loss"]   = df_loss.iloc[:, 1]
-df_loss["flux_loss"]  = 1 - ((1 - df_loss.iloc[:, 2]) / df_loss.iloc[:, 3])
-df_loss["total_loss"] = 1 - (1 - df_loss["frd_loss"]) * (1 - df_loss["flux_loss"])
+df_thr["frd_throughput"]   = df_thr.iloc[:, 1]
+df_thr["flux_throughput"]  = df_thr.iloc[:, 4]
+df_thr["total_throughput"] = df_thr["frd_throughput"]*df_thr["flux_throughput"]
 
 # ===============================
 # Merge
 # ===============================
-data = pd.merge(df_pos, df_loss, on="fiber_id", how="inner")
+data = pd.merge(df_pos, df_thr, on="fiber_id", how="inner")
+data["X_alt"] += -58.4 # so that centre of slit lies at 0
+data["X"] += -18.89 # so that centre of object bundle lies at 0
+data["Y"] += -12.05 # so that centre of object bundle lies at 0
 
 # ==========================================================
 # COMMON SETTINGS FOR BROKEN-X PLOTS (1–3)
 # ==========================================================
-xlims   = [(0, 4), (15, 23), (34, 38)]
+xlims   = [(-19.5, -15), (-4, 4), (15, 19.5)]
 widths = [xmax - xmin for xmin, xmax in xlims]
 
 ymin  = data["Y"].min() - 1
@@ -126,43 +129,43 @@ def broken_stage_plot(values, cmap, title, cbar_label):
 # PLOT 1 — FRD loss (BROKEN X)
 # ==========================================================
 broken_stage_plot(
-    data["frd_loss"],
+    data["frd_throughput"],
     plt.cm.viridis,
-    "FRD loss",
-    "FRD loss"
+    "FRD throughput",
+    "FRD throughput"
 )
 
 # ==========================================================
 # PLOT 2 — Flux loss (BROKEN X)
 # ==========================================================
 broken_stage_plot(
-    data["flux_loss"],
+    data["flux_throughput"],
     plt.cm.viridis,
-    "Flux loss",
-    "Flux loss"
+    "Flux throughput",
+    "Flux throughput"
 )
 
 # ==========================================================
 # PLOT 3 — Total loss (BROKEN X)
 # ==========================================================
 broken_stage_plot(
-    data["total_loss"],
+    data["total_throughput"],
     plt.cm.plasma,
-    "Total loss",
-    "Total loss"
+    "Total throughput",
+    "Total throughput"
 )
 
 # ==========================================================
 # PLOT 4 — 1D slit layout (NO BREAK)
 # ==========================================================
 fig, ax = plt.subplots(figsize=(60, 5))
-norm = plt.Normalize(data["total_loss"].min(), data["total_loss"].max())
+norm = plt.Normalize(data["total_throughput"].min(), data["total_throughput"].max())
 
 for _, row in data.iterrows():
     ax.add_patch(plt.Circle(
         (row["X_alt"], row["Y_alt"]),
         fiber_radius_mm,
-        facecolor=plt.cm.viridis(norm(row["total_loss"])),
+        facecolor=plt.cm.viridis(norm(row["total_throughput"])),
         edgecolor="black",
         lw=0.5
     ))
@@ -170,17 +173,18 @@ for _, row in data.iterrows():
         row["X_alt"], row["Y_alt"],
         f"{int(row['fiber_id'])}",
         ha="center", va="center",
-        fontsize=6, color="white", weight="bold"
+        fontsize=5, color="white", weight="bold"
     )
 
 sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
 sm.set_array([])
-plt.colorbar(sm, ax=ax, label="Total loss")
+plt.colorbar(sm, ax=ax, label="Total throughput")
 
 ax.set_title("Fiber layout on slit")
 ax.set_xlabel("X position (mm)")
 ax.set_ylabel("Y")
 # ax.set_aspect("equal")
+ax.set_xlim(data["X_alt"].min() - 1, data["X_alt"].max() + 1)
 ax.set_xlim(data["X_alt"].min() - 1, data["X_alt"].max() + 1)
 ax.set_ylim(-0.2, 0.2)
 plt.tight_layout()
