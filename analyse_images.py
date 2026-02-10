@@ -263,7 +263,7 @@ for fname in fits_files:
 # ----------------------------
 with open(output_csv, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["fiber_number, frd_throughput, flux_throughput, reference_flux_ratio, flux_throughput_corrected, total_throughput"])
+    writer.writerow(["fiber_number", "frd_throughput", "flux_throughput", "reference_flux_ratio", "flux_throughput_corrected", "total_throughput"])
     writer.writerows(results)
 
 print(f"Saved results to {output_csv}")
