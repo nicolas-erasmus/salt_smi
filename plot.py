@@ -191,3 +191,25 @@ plt.tight_layout()
 plt.savefig("Plot_Slit.pdf", bbox_inches='tight', dpi=150)
 
 # plt.show()
+out_cols = [
+    "fiber_id",
+    "X",
+    "Y",
+    "X_alt",
+    "frd_throughput",
+    "flux_throughput",
+]
+
+out = data[out_cols].copy()
+
+out = out.rename(columns={
+    "fiber_id": "ID",
+    "X": "sky_x",
+    "Y": "sky_y",
+    "X_alt": "slit_x",
+})
+
+out_file = os.path.join(os.getcwd(), "final_data.csv")
+out.to_csv(out_file, index=False, float_format="%.2f")
+
+print(f"Saved {out_file}")
